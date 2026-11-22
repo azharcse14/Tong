@@ -157,6 +157,19 @@ Shob response-er shape ek-i:
 
 ---
 
+## 📚 Swagger docs
+
+Server chalu thakle browser-e kholo:
+
+| URL | Ki pabe |
+|---|---|
+| **http://localhost:8080/docs** | Swagger UI — endpoint dekho, **Try it out** diye sorasori request pathao |
+| http://localhost:8080/swagger.yaml | Raw OpenAPI 3 spec (Postman / Insomnia-te import kora jay) |
+
+Spec-er source file: [`swagger.yaml`](swagger.yaml). Notun endpoint add korle ei file-e o update koro, tahole `/docs` e auto dekhabe. Docker image-e `swagger.yaml` already copy kora hoy.
+
+---
+
 ## 🌐 Language
 
 `Accept-Language` header-er prothom 2 akkhor dekhe language thik hoy:
