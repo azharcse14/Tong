@@ -70,7 +70,7 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := app.Conn.Query(
 		context.Background(),
-		"SELECT id, name, price FROM menu_items LIMIT $1 OFFSET $2",
+		"SELECT id, name, price, image_url FROM menu_items ORDER BY id LIMIT $1 OFFSET $2",
 		limit, offset,
 	)
 	if err != nil {
@@ -82,7 +82,7 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 	items := make([]MenuItem, 0)
 	for rows.Next() {
 		var item MenuItem
-		err := rows.Scan(&item.ID, &item.Name, &item.Price)
+		err := rows.Scan(&item.ID, &item.Name, &item.Price, &item.ImageURL)
 		if err != nil {
 			app.writeError(w, r, http.StatusInternalServerError, "db_read_error")
 			return
@@ -139,13 +139,17 @@ func (app *App) UpdateMenuItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = app.Conn.Exec(
+	tag, err := app.Conn.Exec(
 		context.Background(),
 		"UPDATE menu_items SET name=$1, price=$2 WHERE id=$3",
 		item.Name, item.Price, id,
 	)
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		app.writeError(w, r, http.StatusNotFound, "item_not_found")
 		return
 	}
 

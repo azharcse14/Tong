@@ -5,6 +5,7 @@
   "item_deleted": "Menu item মুছে ফেলা হয়েছে",
   "invalid_payload": "ভুল data পাঠিয়েছ",
   "invalid_id": "Invalid ID",
+  "item_not_found": "Menu item পাওয়া যায়নি",
   "db_error": "Database error",
   "db_read_error": "Data পড়তে সমস্যা",
   "limit_exceeded": "limit সর্বোচ্চ ১০০ হতে পারবে",

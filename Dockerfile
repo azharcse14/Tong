@@ -17,6 +17,8 @@ COPY --from=builder /app/main .
 COPY --from=builder /app/internal/i18n ./internal/i18n
 COPY --from=builder /app/swagger.yaml .
 
+RUN mkdir -p uploads
+
 EXPOSE 8080
 
 CMD ["./main"]

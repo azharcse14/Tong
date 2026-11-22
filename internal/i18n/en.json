@@ -5,6 +5,7 @@
   "item_deleted": "Menu item deleted",
   "invalid_payload": "Invalid request payload",
   "invalid_id": "Invalid ID",
+  "item_not_found": "Menu item not found",
   "db_error": "Database error",
   "db_read_error": "Error reading data",
   "limit_exceeded": "Limit cannot exceed 100",

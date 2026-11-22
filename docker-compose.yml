@@ -6,6 +6,8 @@ services:
     environment:
       DB_URL: postgresql://postgres:password@db:5432/chaidukan
       PORT: 8080
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
