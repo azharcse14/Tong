@@ -1,0 +1,142 @@
+openapi: "3.0.0"
+
+info:
+  title: Chai Shop API
+  version: "1.0.0"
+  description: চায়ের দোকানের menu API
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /menu:
+    get:
+      summary: Menu list দেখো
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+      responses:
+        "200":
+          description: সফল
+          content:
+            application/json:
+              example:
+                success: true
+                message: সফল হয়েছে
+                data:
+                  - id: 1
+                    name: মিল্ক টি
+                    price: 30
+                meta:
+                  total: 1
+                  page: 1
+                  limit: 10
+                  total_pages: 1
+
+    post:
+      summary: নতুন item যোগ করো
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: মিল্ক টি
+              price: 30
+      responses:
+        "201":
+          description: তৈরি হয়েছে
+          content:
+            application/json:
+              example:
+                success: true
+                message: Menu item তৈরি হয়েছে
+                data:
+                  id: 1
+                  name: মিল্ক টি
+                  price: 30
+
+  /menu/{id}:
+    put:
+      summary: Item আপডেট করো
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: লেবু চা
+              price: 25
+      responses:
+        "200":
+          description: আপডেট হয়েছে
+          content:
+            application/json:
+              example:
+                success: true
+                message: Menu item আপডেট হয়েছে
+                data:
+                  id: 1
+                  name: লেবু চা
+                  price: 25
+
+    delete:
+      summary: Item মুছে ফেলো
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: মুছে গেছে
+          content:
+            application/json:
+              example:
+                success: true
+                message: Menu item মুছে ফেলা হয়েছে
+                data: null
+
+  /menu/{id}/image:
+    post:
+      summary: Menu item এ image যোগ করো
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Image আপলোড হয়েছে
+          content:
+            application/json:
+              example:
+                success: true
+                message: Image আপলোড হয়েছে
+                data:
+                  image_url: /uploads/1_123456789.jpg
