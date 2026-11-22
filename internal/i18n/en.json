@@ -1,0 +1,16 @@
+{
+  "success": "Success",
+  "item_created": "Menu item created",
+  "item_updated": "Menu item updated",
+  "item_deleted": "Menu item deleted",
+  "invalid_payload": "Invalid request payload",
+  "invalid_id": "Invalid ID",
+  "db_error": "Database error",
+  "db_read_error": "Error reading data",
+  "limit_exceeded": "Limit cannot exceed 100",
+  "name_invalid": "Name cannot be empty and must be at least 2 characters",
+  "price_invalid": "Price must be greater than 0",
+  "image_required": "Image is required",
+  "invalid_image_type": "Only jpg and png allowed",
+  "image_uploaded": "Image uploaded successfully"
+}

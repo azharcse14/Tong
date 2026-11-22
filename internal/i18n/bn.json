@@ -1,0 +1,16 @@
+{
+  "success": "সফল হয়েছে",
+  "item_created": "Menu item তৈরি হয়েছে",
+  "item_updated": "Menu item আপডেট হয়েছে",
+  "item_deleted": "Menu item মুছে ফেলা হয়েছে",
+  "invalid_payload": "ভুল data পাঠিয়েছ",
+  "invalid_id": "Invalid ID",
+  "db_error": "Database error",
+  "db_read_error": "Data পড়তে সমস্যা",
+  "limit_exceeded": "limit সর্বোচ্চ ১০০ হতে পারবে",
+  "name_invalid": "নাম খালি হতে পারবে না এবং কমপক্ষে ২ অক্ষর হতে হবে",
+  "price_invalid": "দাম অবশ্যই ০ এর বেশি হতে হবে",
+  "image_required": "Image দিতে হবে",
+  "invalid_image_type": "শুধু jpg এবং png হবে",
+  "image_uploaded": "Image আপলোড হয়েছে"
+}
