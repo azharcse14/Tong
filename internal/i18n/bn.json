@@ -13,5 +13,10 @@
   "price_invalid": "দাম অবশ্যই ০ এর বেশি হতে হবে",
   "image_required": "Image দিতে হবে",
   "invalid_image_type": "শুধু jpg এবং png হবে",
-  "image_uploaded": "Image আপলোড হয়েছে"
+  "image_uploaded": "Image আপলোড হয়েছে",
+  "register_success": "রেজিস্ট্রেশন সফল হয়েছে",
+  "email_exists": "এই email আগে থেকেই আছে",
+  "login_success": "লগইন সফল হয়েছে",
+  "invalid_credentials": "Email বা password ভুল",
+  "unauthorized": "অনুমতি নেই, লগইন করুন"
 }

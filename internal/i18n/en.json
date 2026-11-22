@@ -13,5 +13,10 @@
   "price_invalid": "Price must be greater than 0",
   "image_required": "Image is required",
   "invalid_image_type": "Only jpg and png allowed",
-  "image_uploaded": "Image uploaded successfully"
+  "image_uploaded": "Image uploaded successfully",
+  "register_success": "Registration successful",
+  "email_exists": "Email already exists",
+  "login_success": "Login successful",
+  "invalid_credentials": "Invalid email or password",
+  "unauthorized": "Unauthorized, please login"
 }

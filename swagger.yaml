@@ -1,17 +1,75 @@
 openapi: "3.0.0"
 
 info:
-  title: Chai Shop API
+  title: Chai Shop API ☕
   version: "1.0.0"
   description: চায়ের দোকানের menu API
 
 servers:
   - url: http://localhost:8080
 
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
 paths:
+  /auth/register:
+    post:
+      summary: নতুন user বানাও
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: আজহার
+              email: azhar@example.com
+              password: chai1234
+      responses:
+        "201":
+          description: রেজিস্ট্রেশন সফল
+          content:
+            application/json:
+              example:
+                success: true
+                message: রেজিস্ট্রেশন সফল হয়েছে
+                data:
+                  id: 1
+                  name: আজহার
+                  email: azhar@example.com
+
+  /auth/login:
+    post:
+      summary: Login করো
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              email: azhar@example.com
+              password: chai1234
+      responses:
+        "200":
+          description: Login সফল
+          content:
+            application/json:
+              example:
+                success: true
+                message: লগইন সফল হয়েছে
+                data:
+                  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
   /menu:
     get:
       summary: Menu list দেখো
+      tags:
+        - Menu
       parameters:
         - name: page
           in: query
@@ -44,6 +102,10 @@ paths:
 
     post:
       summary: নতুন item যোগ করো
+      tags:
+        - Menu
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -67,6 +129,10 @@ paths:
   /menu/{id}:
     put:
       summary: Item আপডেট করো
+      tags:
+        - Menu
+      security:
+        - BearerAuth: []
       parameters:
         - name: id
           in: path
@@ -95,6 +161,10 @@ paths:
 
     delete:
       summary: Item মুছে ফেলো
+      tags:
+        - Menu
+      security:
+        - BearerAuth: []
       parameters:
         - name: id
           in: path
@@ -114,6 +184,10 @@ paths:
   /menu/{id}/image:
     post:
       summary: Menu item এ image যোগ করো
+      tags:
+        - Menu
+      security:
+        - BearerAuth: []
       parameters:
         - name: id
           in: path

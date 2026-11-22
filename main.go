@@ -47,17 +47,22 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	// Public
 	mux.HandleFunc("GET /menu", app.HandleMenu)
-	mux.HandleFunc("POST /menu", app.CreateMenuItem)
-	mux.HandleFunc("PUT /menu/{id}", app.UpdateMenuItem)
-	mux.HandleFunc("DELETE /menu/{id}", app.DeleteMenuItem)
+	mux.Handle("POST /menu", app.AuthMiddleware(http.HandlerFunc(app.CreateMenuItem)))
+	mux.Handle("PUT /menu/{id}", app.AuthMiddleware(http.HandlerFunc(app.UpdateMenuItem)))
+	mux.Handle("DELETE /menu/{id}", app.AuthMiddleware(http.HandlerFunc(app.DeleteMenuItem)))
+	mux.Handle("POST /menu/{id}/image", app.AuthMiddleware(http.HandlerFunc(app.UploadMenuImage)))
 
+	// Auth
+	mux.HandleFunc("POST /auth/register", app.Register)
+	mux.HandleFunc("POST /auth/login", app.Login)
+
+	// Docs
 	mux.HandleFunc("GET /docs", handler.SwaggerUI)
 	mux.HandleFunc("GET /swagger.yaml", handler.SwaggerYAML)
-
-	mux.HandleFunc("POST /menu/{id}/image", app.UploadMenuImage)
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
-
+	
 	wrappedMux := handler.Logger(handler.Recoverer(mux))
 
 	server := &http.Server{
