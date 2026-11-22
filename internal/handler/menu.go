@@ -70,7 +70,7 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := app.Conn.Query(
 		context.Background(),
-		"SELECT id, name, price, image_url FROM menu_items ORDER BY id LIMIT $1 OFFSET $2",
+		"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items ORDER BY id LIMIT $1 OFFSET $2",
 		limit, offset,
 	)
 	if err != nil {
