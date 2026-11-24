@@ -224,6 +224,11 @@ ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT 
 
 ---
 
+## 🛠️ Migration
+make migrate-up          # migration apply করো
+make migrate-down        # migration undo করো
+make migrate-create name=add_phone_to_users  # নতুন migration বানাও
+
 <div align="center">
 
 Made with ☕ and Go
