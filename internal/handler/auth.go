@@ -52,6 +52,8 @@ func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	go sendWelcomeEmail(req.Email, req.Name)
+
 	app.writeJSON(w, r, http.StatusCreated, "register_success", map[string]any{
 		"id":    userID,
 		"name":  req.Name,
