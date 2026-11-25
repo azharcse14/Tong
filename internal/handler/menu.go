@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -60,28 +61,72 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	offset := (page - 1) * limit
 
-	// /menu?search=আদা → name-e "আদা" ache emon item; khali hole pattern "%%" = shob item.
-	// %, _ escape kora — jate user-er input literal hishebe match kore.
+	// URL থেকে সব parameter নাও
 	search := r.URL.Query().Get("search")
-	pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
+	minPriceStr := r.URL.Query().Get("min_price")
+	maxPriceStr := r.URL.Query().Get("max_price")
 
+	// WHERE clause dynamically build করো
+	conditions := []string{}
+	args := []any{}
+
+	// search condition
+	if search != "" {
+		pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
+		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", len(args)+1))
+		args = append(args, pattern)
+	}
+
+	// min_price condition
+	if minPriceStr != "" {
+		if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil && val >= 0 {
+			conditions = append(conditions, fmt.Sprintf("price >= $%d", len(args)+1))
+			args = append(args, val)
+		}
+	}
+
+	// max_price condition
+	if maxPriceStr != "" {
+		if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && val >= 0 {
+			conditions = append(conditions, fmt.Sprintf("price <= $%d", len(args)+1))
+			args = append(args, val)
+		}
+	}
+
+	// WHERE clause বানাও
+	// conditions খালি হলে where = "" → সব item দেখাবে
+	// conditions আছে হলে where = "WHERE name ILIKE $1 AND price >= $2"
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// COUNT query — কতটা item আছে মোট
 	var total int
+	countArgs := append([]any{}, args...)
 	err := app.Conn.QueryRow(
 		context.Background(),
-		"SELECT COUNT(*) FROM menu_items WHERE name ILIKE $1",
-		pattern,
+		fmt.Sprintf("SELECT COUNT(*) FROM menu_items %s", where),
+		countArgs...,
 	).Scan(&total)
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
 		return
 	}
 
+	// LIMIT আর OFFSET এর জন্য args এ যোগ করো
+	limitArg := len(args) + 1
+	offsetArg := len(args) + 2
+	args = append(args, limit, offset)
+
 	rows, err := app.Conn.Query(
 		context.Background(),
-		"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items WHERE name ILIKE $1 ORDER BY id LIMIT $2 OFFSET $3",
-		pattern, limit, offset,
+		fmt.Sprintf(
+			"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items %s ORDER BY id LIMIT $%d OFFSET $%d",
+			where, limitArg, offsetArg,
+		),
+		args...,
 	)
-
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
 		return
