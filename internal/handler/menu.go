@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"chai-shop/internal/i18n"
 	"github.com/go-playground/validator/v10"
@@ -47,13 +48,11 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 			page = val
 		}
 	}
-
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if val, err := strconv.Atoi(l); err == nil && val > 0 {
 			limit = val
 		}
 	}
-
 	if limit > 100 {
 		app.writeError(w, r, http.StatusBadRequest, "limit_exceeded")
 		return
@@ -61,8 +60,17 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	offset := (page - 1) * limit
 
+	// /menu?search=আদা → name-e "আদা" ache emon item; khali hole pattern "%%" = shob item.
+	// %, _ escape kora — jate user-er input literal hishebe match kore.
+	search := r.URL.Query().Get("search")
+	pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
+
 	var total int
-	err := app.Conn.QueryRow(context.Background(), "SELECT COUNT(*) FROM menu_items").Scan(&total)
+	err := app.Conn.QueryRow(
+		context.Background(),
+		"SELECT COUNT(*) FROM menu_items WHERE name ILIKE $1",
+		pattern,
+	).Scan(&total)
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
 		return
@@ -70,9 +78,10 @@ func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := app.Conn.Query(
 		context.Background(),
-		"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items ORDER BY id LIMIT $1 OFFSET $2",
-		limit, offset,
+		"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items WHERE name ILIKE $1 ORDER BY id LIMIT $2 OFFSET $3",
+		pattern, limit, offset,
 	)
+
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
 		return

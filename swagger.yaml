@@ -82,6 +82,12 @@ paths:
             type: integer
             default: 10
             maximum: 100
+        - name: search
+          in: query
+          description: নাম দিয়ে খোঁজো (case-insensitive, আংশিক মিল)। `%` আর `_` সাধারণ অক্ষর হিসেবে ধরা হয়।
+          schema:
+            type: string
+          example: চা
       responses:
         "200":
           description: সফল
