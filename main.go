@@ -63,7 +63,7 @@ func main() {
 	mux.HandleFunc("GET /swagger.yaml", handler.SwaggerYAML)
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 	
-	wrappedMux := handler.Logger(handler.Recoverer(mux))
+	wrappedMux := handler.Logger(handler.Recoverer(app.RateLimit(mux)))
 
 	server := &http.Server{
 		Addr:    ":" + port,
