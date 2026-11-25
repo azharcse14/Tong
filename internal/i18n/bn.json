@@ -18,5 +18,6 @@
   "email_exists": "এই email আগে থেকেই আছে",
   "login_success": "লগইন সফল হয়েছে",
   "invalid_credentials": "Email বা password ভুল",
-  "unauthorized": "অনুমতি নেই, লগইন করুন"
+  "unauthorized": "অনুমতি নেই, লগইন করুন",
+  "too_many_requests": "অনেক বেশি request, একটু অপেক্ষা করো"
 }

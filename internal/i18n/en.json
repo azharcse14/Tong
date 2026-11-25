@@ -18,5 +18,6 @@
   "email_exists": "Email already exists",
   "login_success": "Login successful",
   "invalid_credentials": "Invalid email or password",
-  "unauthorized": "Unauthorized, please login"
+  "unauthorized": "Unauthorized, please login",
+  "too_many_requests": "Too many requests, please wait a moment"
 }
