@@ -8,6 +8,7 @@ import (
 	"chai-shop/internal/db"
 	"chai-shop/internal/handler"
 	"chai-shop/internal/i18n"
+	"chai-shop/internal/cache"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
@@ -40,11 +41,18 @@ func main() {
 		return
 	}
 
-	app := &handler.App{
-		Conn:      conn,
-		Validate:  validator.New(),
-		Localizer: localizer,
-	}
+    redisAddr := os.Getenv("REDIS_URL")
+    if redisAddr == "" {
+        redisAddr = "localhost:6379"
+    }
+    redisCache := cache.New(redisAddr)
+
+    app := &handler.App{
+        Conn:      conn,
+        Validate:  validator.New(),
+        Localizer: localizer,
+        Cache:     redisCache,
+    }
 
 	mux := http.NewServeMux()
 	// Public

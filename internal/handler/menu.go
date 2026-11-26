@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time" 
 
 	"chai-shop/internal/i18n"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"chai-shop/internal/cache"
 )
 
 type Response struct {
@@ -50,126 +52,157 @@ type App struct {
 	Conn      *pgxpool.Pool
 	Validate  *validator.Validate
 	Localizer *i18n.Localizer
+	Cache     *cache.Cache
 }
 
 func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
-    page := 1
-    limit := 10
+	page := 1
+	limit := 10
 
-    if p := r.URL.Query().Get("page"); p != "" {
-        if val, err := strconv.Atoi(p); err == nil && val > 0 {
-            page = val
-        }
-    }
-    if l := r.URL.Query().Get("limit"); l != "" {
-        if val, err := strconv.Atoi(l); err == nil && val > 0 {
-            limit = val
-        }
-    }
-    if limit > 100 {
-        app.writeError(w, r, http.StatusBadRequest, "limit_exceeded")
-        return
-    }
+	if p := r.URL.Query().Get("page"); p != "" {
+		if val, err := strconv.Atoi(p); err == nil && val > 0 {
+			page = val
+		}
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = val
+		}
+	}
+	if limit > 100 {
+		app.writeError(w, r, http.StatusBadRequest, "limit_exceeded")
+		return
+	}
 
-    offset := (page - 1) * limit
+	offset := (page - 1) * limit
+	lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
+	search := r.URL.Query().Get("search")
+	minPriceStr := r.URL.Query().Get("min_price")
+	maxPriceStr := r.URL.Query().Get("max_price")
 
-    // user কোন ভাষায় আছে সেটা detect করো
-    lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
+	// Cache key বানাও — সব parameter মিলিয়ে unique key
+	cacheKey := fmt.Sprintf("menu:%s:search:%s:min:%s:max:%s:page:%d:limit:%d",
+		lang, search, minPriceStr, maxPriceStr, page, limit,
+	)
 
-    search := r.URL.Query().Get("search")
-    minPriceStr := r.URL.Query().Get("min_price")
-    maxPriceStr := r.URL.Query().Get("max_price")
+	// Redis এ খোঁজো
+	cached, err := app.Cache.Get(context.Background(), cacheKey)
+	if err == nil && cached != "" {
+		// পাওয়া গেছে! সরাসরি দাও
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("X-Cache", "HIT") // debug এর জন্য — cache থেকে এসেছে বোঝাতে
+		w.Write([]byte(cached))
+		return
+	}
 
-    conditions := []string{}
-    args := []any{}
+	// Cache এ নেই — Database থেকে আনো
+	conditions := []string{}
+	args := []any{}
 
-    // search — সেই ভাষার translation এ খুঁজবে
-    if search != "" {
-        pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
-        conditions = append(conditions, fmt.Sprintf(
-            "EXISTS (SELECT 1 FROM menu_item_translations t WHERE t.item_id = m.id AND t.lang = $%d AND t.name ILIKE $%d)",
-            len(args)+1, len(args)+2,
-        ))
-        args = append(args, lang, pattern)
-    }
+	if search != "" {
+		pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
+		conditions = append(conditions, fmt.Sprintf(
+			"EXISTS (SELECT 1 FROM menu_item_translations t WHERE t.item_id = m.id AND t.lang = $%d AND t.name ILIKE $%d)",
+			len(args)+1, len(args)+2,
+		))
+		args = append(args, lang, pattern)
+	}
 
-    if minPriceStr != "" {
-        if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil && val >= 0 {
-            conditions = append(conditions, fmt.Sprintf("m.price >= $%d", len(args)+1))
-            args = append(args, val)
-        }
-    }
+	if minPriceStr != "" {
+		if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil && val >= 0 {
+			conditions = append(conditions, fmt.Sprintf("m.price >= $%d", len(args)+1))
+			args = append(args, val)
+		}
+	}
 
-    if maxPriceStr != "" {
-        if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && val >= 0 {
-            conditions = append(conditions, fmt.Sprintf("m.price <= $%d", len(args)+1))
-            args = append(args, val)
-        }
-    }
+	if maxPriceStr != "" {
+		if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && val >= 0 {
+			conditions = append(conditions, fmt.Sprintf("m.price <= $%d", len(args)+1))
+			args = append(args, val)
+		}
+	}
 
-    where := ""
-    if len(conditions) > 0 {
-        where = "WHERE " + strings.Join(conditions, " AND ")
-    }
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
 
-    var total int
-    countArgs := append([]any{}, args...)
-    err := app.Conn.QueryRow(
-        context.Background(),
-        fmt.Sprintf("SELECT COUNT(*) FROM menu_items m %s", where),
-        countArgs...,
-    ).Scan(&total)
-    if err != nil {
-        app.writeError(w, r, http.StatusInternalServerError, "db_error")
-        return
-    }
+	var total int
+	countArgs := append([]any{}, args...)
+	err = app.Conn.QueryRow(
+		context.Background(),
+		fmt.Sprintf("SELECT COUNT(*) FROM menu_items m %s", where),
+		countArgs...,
+	).Scan(&total)
+	if err != nil {
+		app.writeError(w, r, http.StatusInternalServerError, "db_error")
+		return
+	}
 
-    limitArg := len(args) + 1
-    offsetArg := len(args) + 2
-    args = append(args, limit, offset)
+	limitArg := len(args) + 1
+	offsetArg := len(args) + 2
+	args = append(args, limit, offset)
 
-    // menu_items এর সাথে translation JOIN করো
-    // সেই ভাষার নাম না থাকলে যেকোনো একটা নাম দেখাবে (COALESCE)
-    rows, err := app.Conn.Query(
-        context.Background(),
-        fmt.Sprintf(`
-            SELECT m.id, m.price, COALESCE(m.image_url, ''),
-                   COALESCE(
-                       (SELECT name FROM menu_item_translations WHERE item_id = m.id AND lang = '%s'),
-                       (SELECT name FROM menu_item_translations WHERE item_id = m.id LIMIT 1),
-                       ''
-                   ) as name
-            FROM menu_items m %s
-            ORDER BY m.id
-            LIMIT $%d OFFSET $%d
-        `, lang, where, limitArg, offsetArg),
-        args...,
-    )
-    if err != nil {
-        app.writeError(w, r, http.StatusInternalServerError, "db_error")
-        return
-    }
-    defer rows.Close()
+	rows, err := app.Conn.Query(
+		context.Background(),
+		fmt.Sprintf(`
+			SELECT m.id, m.price, COALESCE(m.image_url, ''),
+				   COALESCE(
+					   (SELECT name FROM menu_item_translations WHERE item_id = m.id AND lang = '%s'),
+					   (SELECT name FROM menu_item_translations WHERE item_id = m.id LIMIT 1),
+					   ''
+				   ) as name
+			FROM menu_items m %s
+			ORDER BY m.id
+			LIMIT $%d OFFSET $%d
+		`, lang, where, limitArg, offsetArg),
+		args...,
+	)
+	if err != nil {
+		app.writeError(w, r, http.StatusInternalServerError, "db_error")
+		return
+	}
+	defer rows.Close()
 
-    items := make([]MenuItem, 0)
-    for rows.Next() {
-        var item MenuItem
-        err := rows.Scan(&item.ID, &item.Price, &item.ImageURL, &item.Name)
-        if err != nil {
-            app.writeError(w, r, http.StatusInternalServerError, "db_read_error")
-            return
-        }
-        items = append(items, item)
-    }
+	items := make([]MenuItem, 0)
+	for rows.Next() {
+		var item MenuItem
+		err := rows.Scan(&item.ID, &item.Price, &item.ImageURL, &item.Name)
+		if err != nil {
+			app.writeError(w, r, http.StatusInternalServerError, "db_read_error")
+			return
+		}
+		items = append(items, item)
+	}
 
-    totalPages := (total + limit - 1) / limit
+	totalPages := (total + limit - 1) / limit
 
-    app.writeJSONMeta(w, r, http.StatusOK, "success", items, &Meta{
-        Total:      total,
-        Page:       page,
-        Limit:      limit,
-        TotalPages: totalPages,
-    })
+	// Response বানাও
+	response := Response{
+		Success: true,
+		Message: app.Localizer.T(lang, "success"),
+		Data:    items,
+		Meta: &Meta{
+			Total:      total,
+			Page:       page,
+			Limit:      limit,
+			TotalPages: totalPages,
+		},
+	}
+
+	// JSON এ convert করো
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		app.writeError(w, r, http.StatusInternalServerError, "db_error")
+		return
+	}
+
+	// Redis এ রেখে দাও — ৫ মিনিট পরে নিজেই মুছবে
+	app.Cache.Set(context.Background(), cacheKey, string(jsonBytes), 5*time.Minute)
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Cache", "MISS") // debug — database থেকে এসেছে
+	w.Write(jsonBytes)
 }
 
 func (app *App) CreateMenuItem(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +239,8 @@ func (app *App) CreateMenuItem(w http.ResponseWriter, r *http.Request) {
         app.writeError(w, r, http.StatusInternalServerError, "db_error")
         return
     }
+
+	app.Cache.DeletePattern(context.Background(), "menu:*")
 
     app.writeJSON(w, r, http.StatusCreated, "item_created", map[string]any{
         "id":      itemID,
@@ -258,6 +293,8 @@ func (app *App) UpdateMenuItem(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+	app.Cache.DeletePattern(context.Background(), "menu:*")
+
     app.writeJSON(w, r, http.StatusOK, "item_updated", map[string]any{
         "id":      id,
         "price":   req.Price,
@@ -278,6 +315,8 @@ func (app *App) DeleteMenuItem(w http.ResponseWriter, r *http.Request) {
 		app.writeError(w, r, http.StatusInternalServerError, "db_error")
 		return
 	}
+
+	app.Cache.DeletePattern(context.Background(), "menu:*")
 
 	app.writeJSON(w, r, http.StatusOK, "item_deleted", nil)
 }
