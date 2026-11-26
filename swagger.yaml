@@ -84,20 +84,20 @@ paths:
             maximum: 100
         - name: search
           in: query
-          description: নাম দিয়ে খোঁজো (case-insensitive, আংশিক মিল)। `%` আর `_` সাধারণ অক্ষর হিসেবে ধরা হয়।
+          description: নাম দিয়ে খোঁজো (Accept-Language header অনুযায়ী bn বা en এ খোঁজে)
           schema:
             type: string
           example: চা
         - name: min_price
           in: query
-          description: এই দামের সমান বা বেশি item (invalid বা negative হলে ignore হয়)
+          description: এই দামের সমান বা বেশি item
           schema:
             type: number
             minimum: 0
           example: 20
         - name: max_price
           in: query
-          description: এই দামের সমান বা কম item (invalid বা negative হলে ignore হয়)
+          description: এই দামের সমান বা কম item
           schema:
             type: number
             minimum: 0
@@ -114,6 +114,7 @@ paths:
                   - id: 1
                     name: মিল্ক টি
                     price: 30
+                    image_url: /uploads/1_123456789.jpg
                 meta:
                   total: 1
                   page: 1
@@ -131,7 +132,8 @@ paths:
         content:
           application/json:
             example:
-              name: মিল্ক টি
+              name_bn: মিল্ক টি
+              name_en: Milk Tea
               price: 30
       responses:
         "201":
@@ -143,7 +145,8 @@ paths:
                 message: Menu item তৈরি হয়েছে
                 data:
                   id: 1
-                  name: মিল্ক টি
+                  name_bn: মিল্ক টি
+                  name_en: Milk Tea
                   price: 30
 
   /menu/{id}:
@@ -164,7 +167,8 @@ paths:
         content:
           application/json:
             example:
-              name: লেবু চা
+              name_bn: লেবু চা
+              name_en: Lemon Tea
               price: 25
       responses:
         "200":
@@ -176,7 +180,8 @@ paths:
                 message: Menu item আপডেট হয়েছে
                 data:
                   id: 1
-                  name: লেবু চা
+                  name_bn: লেবু চা
+                  name_en: Lemon Tea
                   price: 25
 
     delete:

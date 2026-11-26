@@ -27,11 +27,23 @@ type Meta struct {
 	TotalPages int `json:"total_pages"`
 }
 
+type Translation struct {
+    Lang string `json:"lang"`
+    Name string `json:"name" validate:"required,min=2,max=100"`
+}
+
 type MenuItem struct {
-	ID       int     `json:"id"`
-	Name     string  `json:"name" validate:"required,min=2,max=100"`
-	Price    float64 `json:"price" validate:"required,gt=0"`
-	ImageURL string  `json:"image_url,omitempty"`
+    ID           int           `json:"id"`
+    Price        float64       `json:"price" validate:"required,gt=0"`
+    ImageURL     string        `json:"image_url,omitempty"`
+    Translations []Translation `json:"translations,omitempty"`
+    Name         string        `json:"name,omitempty"` // response এ current lang এর নাম
+}
+
+type MenuItemRequest struct {
+    NameBn string  `json:"name_bn" validate:"required,min=2,max=100"`
+    NameEn string  `json:"name_en" validate:"required,min=2,max=100"`
+    Price  float64 `json:"price" validate:"required,gt=0"`
 }
 
 type App struct {
@@ -41,173 +53,217 @@ type App struct {
 }
 
 func (app *App) HandleMenu(w http.ResponseWriter, r *http.Request) {
-	page := 1
-	limit := 10
+    page := 1
+    limit := 10
 
-	if p := r.URL.Query().Get("page"); p != "" {
-		if val, err := strconv.Atoi(p); err == nil && val > 0 {
-			page = val
-		}
-	}
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil && val > 0 {
-			limit = val
-		}
-	}
-	if limit > 100 {
-		app.writeError(w, r, http.StatusBadRequest, "limit_exceeded")
-		return
-	}
+    if p := r.URL.Query().Get("page"); p != "" {
+        if val, err := strconv.Atoi(p); err == nil && val > 0 {
+            page = val
+        }
+    }
+    if l := r.URL.Query().Get("limit"); l != "" {
+        if val, err := strconv.Atoi(l); err == nil && val > 0 {
+            limit = val
+        }
+    }
+    if limit > 100 {
+        app.writeError(w, r, http.StatusBadRequest, "limit_exceeded")
+        return
+    }
 
-	offset := (page - 1) * limit
+    offset := (page - 1) * limit
 
-	// URL থেকে সব parameter নাও
-	search := r.URL.Query().Get("search")
-	minPriceStr := r.URL.Query().Get("min_price")
-	maxPriceStr := r.URL.Query().Get("max_price")
+    // user কোন ভাষায় আছে সেটা detect করো
+    lang := i18n.DetectLang(r.Header.Get("Accept-Language"))
 
-	// WHERE clause dynamically build করো
-	conditions := []string{}
-	args := []any{}
+    search := r.URL.Query().Get("search")
+    minPriceStr := r.URL.Query().Get("min_price")
+    maxPriceStr := r.URL.Query().Get("max_price")
 
-	// search condition
-	if search != "" {
-		pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
-		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", len(args)+1))
-		args = append(args, pattern)
-	}
+    conditions := []string{}
+    args := []any{}
 
-	// min_price condition
-	if minPriceStr != "" {
-		if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil && val >= 0 {
-			conditions = append(conditions, fmt.Sprintf("price >= $%d", len(args)+1))
-			args = append(args, val)
-		}
-	}
+    // search — সেই ভাষার translation এ খুঁজবে
+    if search != "" {
+        pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search) + "%"
+        conditions = append(conditions, fmt.Sprintf(
+            "EXISTS (SELECT 1 FROM menu_item_translations t WHERE t.item_id = m.id AND t.lang = $%d AND t.name ILIKE $%d)",
+            len(args)+1, len(args)+2,
+        ))
+        args = append(args, lang, pattern)
+    }
 
-	// max_price condition
-	if maxPriceStr != "" {
-		if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && val >= 0 {
-			conditions = append(conditions, fmt.Sprintf("price <= $%d", len(args)+1))
-			args = append(args, val)
-		}
-	}
+    if minPriceStr != "" {
+        if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil && val >= 0 {
+            conditions = append(conditions, fmt.Sprintf("m.price >= $%d", len(args)+1))
+            args = append(args, val)
+        }
+    }
 
-	// WHERE clause বানাও
-	// conditions খালি হলে where = "" → সব item দেখাবে
-	// conditions আছে হলে where = "WHERE name ILIKE $1 AND price >= $2"
-	where := ""
-	if len(conditions) > 0 {
-		where = "WHERE " + strings.Join(conditions, " AND ")
-	}
+    if maxPriceStr != "" {
+        if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil && val >= 0 {
+            conditions = append(conditions, fmt.Sprintf("m.price <= $%d", len(args)+1))
+            args = append(args, val)
+        }
+    }
 
-	// COUNT query — কতটা item আছে মোট
-	var total int
-	countArgs := append([]any{}, args...)
-	err := app.Conn.QueryRow(
-		context.Background(),
-		fmt.Sprintf("SELECT COUNT(*) FROM menu_items %s", where),
-		countArgs...,
-	).Scan(&total)
-	if err != nil {
-		app.writeError(w, r, http.StatusInternalServerError, "db_error")
-		return
-	}
+    where := ""
+    if len(conditions) > 0 {
+        where = "WHERE " + strings.Join(conditions, " AND ")
+    }
 
-	// LIMIT আর OFFSET এর জন্য args এ যোগ করো
-	limitArg := len(args) + 1
-	offsetArg := len(args) + 2
-	args = append(args, limit, offset)
+    var total int
+    countArgs := append([]any{}, args...)
+    err := app.Conn.QueryRow(
+        context.Background(),
+        fmt.Sprintf("SELECT COUNT(*) FROM menu_items m %s", where),
+        countArgs...,
+    ).Scan(&total)
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
 
-	rows, err := app.Conn.Query(
-		context.Background(),
-		fmt.Sprintf(
-			"SELECT id, name, price, COALESCE(image_url, '') FROM menu_items %s ORDER BY id LIMIT $%d OFFSET $%d",
-			where, limitArg, offsetArg,
-		),
-		args...,
-	)
-	if err != nil {
-		app.writeError(w, r, http.StatusInternalServerError, "db_error")
-		return
-	}
-	defer rows.Close()
+    limitArg := len(args) + 1
+    offsetArg := len(args) + 2
+    args = append(args, limit, offset)
 
-	items := make([]MenuItem, 0)
-	for rows.Next() {
-		var item MenuItem
-		err := rows.Scan(&item.ID, &item.Name, &item.Price, &item.ImageURL)
-		if err != nil {
-			app.writeError(w, r, http.StatusInternalServerError, "db_read_error")
-			return
-		}
-		items = append(items, item)
-	}
+    // menu_items এর সাথে translation JOIN করো
+    // সেই ভাষার নাম না থাকলে যেকোনো একটা নাম দেখাবে (COALESCE)
+    rows, err := app.Conn.Query(
+        context.Background(),
+        fmt.Sprintf(`
+            SELECT m.id, m.price, COALESCE(m.image_url, ''),
+                   COALESCE(
+                       (SELECT name FROM menu_item_translations WHERE item_id = m.id AND lang = '%s'),
+                       (SELECT name FROM menu_item_translations WHERE item_id = m.id LIMIT 1),
+                       ''
+                   ) as name
+            FROM menu_items m %s
+            ORDER BY m.id
+            LIMIT $%d OFFSET $%d
+        `, lang, where, limitArg, offsetArg),
+        args...,
+    )
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
+    defer rows.Close()
 
-	totalPages := (total + limit - 1) / limit
+    items := make([]MenuItem, 0)
+    for rows.Next() {
+        var item MenuItem
+        err := rows.Scan(&item.ID, &item.Price, &item.ImageURL, &item.Name)
+        if err != nil {
+            app.writeError(w, r, http.StatusInternalServerError, "db_read_error")
+            return
+        }
+        items = append(items, item)
+    }
 
-	app.writeJSONMeta(w, r, http.StatusOK, "success", items, &Meta{
-		Total:      total,
-		Page:       page,
-		Limit:      limit,
-		TotalPages: totalPages,
-	})
+    totalPages := (total + limit - 1) / limit
+
+    app.writeJSONMeta(w, r, http.StatusOK, "success", items, &Meta{
+        Total:      total,
+        Page:       page,
+        Limit:      limit,
+        TotalPages: totalPages,
+    })
 }
 
 func (app *App) CreateMenuItem(w http.ResponseWriter, r *http.Request) {
-	var item MenuItem
-	err := json.NewDecoder(r.Body).Decode(&item)
-	if err != nil {
-		app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
-		return
-	}
+    var req MenuItemRequest
+    err := json.NewDecoder(r.Body).Decode(&req)
+    if err != nil {
+        app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
+        return
+    }
+    if err := app.Validate.Struct(req); err != nil {
+        app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
+        return
+    }
 
-	if !app.validateMenuItem(w, r, item) {
-		return
-	}
+    // প্রথমে menu_items এ insert করো, id পাও
+    var itemID int
+    err = app.Conn.QueryRow(
+        context.Background(),
+        "INSERT INTO menu_items (price) VALUES ($1) RETURNING id",
+        req.Price,
+    ).Scan(&itemID)
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
 
-	err = app.Conn.QueryRow(
-		context.Background(),
-		"INSERT INTO menu_items (name, price) VALUES ($1, $2) RETURNING id",
-		item.Name, item.Price,
-	).Scan(&item.ID)
-	if err != nil {
-		app.writeError(w, r, http.StatusInternalServerError, "db_error")
-		return
-	}
+    // তারপর দুটো translation insert করো
+    _, err = app.Conn.Exec(
+        context.Background(),
+        "INSERT INTO menu_item_translations (item_id, lang, name) VALUES ($1, 'bn', $2), ($1, 'en', $3)",
+        itemID, req.NameBn, req.NameEn,
+    )
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
 
-	app.writeJSON(w, r, http.StatusCreated, "item_created", item)
+    app.writeJSON(w, r, http.StatusCreated, "item_created", map[string]any{
+        "id":      itemID,
+        "price":   req.Price,
+        "name_bn": req.NameBn,
+        "name_en": req.NameEn,
+    })
 }
 
 func (app *App) UpdateMenuItem(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+    id, err := strconv.Atoi(r.PathValue("id"))
+    if err != nil {
+        app.writeError(w, r, http.StatusBadRequest, "invalid_id")
+        return
+    }
+    var req MenuItemRequest
+    err = json.NewDecoder(r.Body).Decode(&req)
+    if err != nil {
+        app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
+        return
+    }
+    if err := app.Validate.Struct(req); err != nil {
+        app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
+        return
+    }
 
-	var item MenuItem
-	err := json.NewDecoder(r.Body).Decode(&item)
-	if err != nil {
-		app.writeError(w, r, http.StatusBadRequest, "invalid_payload")
-		return
-	}
+    tag, err := app.Conn.Exec(
+        context.Background(),
+        "UPDATE menu_items SET price=$1 WHERE id=$2",
+        req.Price, id,
+    )
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
+    if tag.RowsAffected() == 0 {
+        app.writeError(w, r, http.StatusNotFound, "item_not_found")
+        return
+    }
 
-	if !app.validateMenuItem(w, r, item) {
-		return
-	}
+    // translation upsert — আগে থাকলে update, না থাকলে insert
+    _, err = app.Conn.Exec(
+        context.Background(),
+        `INSERT INTO menu_item_translations (item_id, lang, name) VALUES ($1, 'bn', $2), ($1, 'en', $3)
+         ON CONFLICT (item_id, lang) DO UPDATE SET name = EXCLUDED.name`,
+        id, req.NameBn, req.NameEn,
+    )
+    if err != nil {
+        app.writeError(w, r, http.StatusInternalServerError, "db_error")
+        return
+    }
 
-	tag, err := app.Conn.Exec(
-		context.Background(),
-		"UPDATE menu_items SET name=$1, price=$2 WHERE id=$3",
-		item.Name, item.Price, id,
-	)
-	if err != nil {
-		app.writeError(w, r, http.StatusInternalServerError, "db_error")
-		return
-	}
-	if tag.RowsAffected() == 0 {
-		app.writeError(w, r, http.StatusNotFound, "item_not_found")
-		return
-	}
-
-	app.writeJSON(w, r, http.StatusOK, "item_updated", item)
+    app.writeJSON(w, r, http.StatusOK, "item_updated", map[string]any{
+        "id":      id,
+        "price":   req.Price,
+        "name_bn": req.NameBn,
+        "name_en": req.NameEn,
+    })
 }
 
 func (app *App) DeleteMenuItem(w http.ResponseWriter, r *http.Request) {
@@ -224,24 +280,6 @@ func (app *App) DeleteMenuItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.writeJSON(w, r, http.StatusOK, "item_deleted", nil)
-}
-
-func (app *App) validateMenuItem(w http.ResponseWriter, r *http.Request, item MenuItem) bool {
-	err := app.Validate.Struct(item)
-	if err != nil {
-		errors := err.(validator.ValidationErrors)
-		for _, e := range errors {
-			switch e.Field() {
-			case "Name":
-				app.writeError(w, r, http.StatusBadRequest, "name_invalid")
-				return false
-			case "Price":
-				app.writeError(w, r, http.StatusBadRequest, "price_invalid")
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func (app *App) writeJSON(w http.ResponseWriter, r *http.Request, status int, key string, data any) {

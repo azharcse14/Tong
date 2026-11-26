@@ -42,7 +42,7 @@ chai-shop/
 │   ├── db/                  # pgx connection pool
 │   ├── handler/             # menu, upload, docs, middleware
 │   └── i18n/                # en.json, bn.json, Localizer
-├── init.sql                 # menu_items table
+├── migrations/              # database schema (golang-migrate)
 ├── swagger.yaml             # OpenAPI 3 spec
 ├── load_test.js             # k6 load test
 ├── Dockerfile               # multi-stage build
@@ -65,12 +65,11 @@ Postgres host-e: `localhost:5433` (user `postgres`, password `password`, db `cha
 
 ### Option 2 — Local-e chalao 💻
 
-**Lagbe:** Go 1.27+, PostgreSQL
+**Lagbe:** Go 1.27+, PostgreSQL, [golang-migrate](https://github.com/golang-migrate/migrate)
 
 ```bash
-# 1. Database baniye table create koro
+# 1. Database banao
 createdb chaidukan
-psql chaidukan -f init.sql
 
 # 2. .env file banao
 cat > .env <<'EOF'
@@ -78,7 +77,10 @@ DB_URL=postgresql://postgres:password@localhost:5432/chaidukan
 PORT=8080
 EOF
 
-# 3. Run
+# 3. Table create koro
+make migrate-up
+
+# 4. Run
 go run .
 ```
 
@@ -111,10 +113,13 @@ Base URL: `http://localhost:8080` · Interactive docs: **[/docs](http://localhos
 ### Quick try
 
 ```bash
+# TOKEN ta POST /auth/login theke pabe
+
 # Item add
 curl -X POST localhost:8080/menu \
   -H "Content-Type: application/json" \
-  -d '{"name":"মিল্ক টি","price":30}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name_bn":"মিল্ক টি","name_en":"Milk Tea","price":30}'
 
 # List (Bangla message soho)
 curl "localhost:8080/menu?page=1&limit=5" -H "Accept-Language: bn"
@@ -122,13 +127,14 @@ curl "localhost:8080/menu?page=1&limit=5" -H "Accept-Language: bn"
 # Update
 curl -X PUT localhost:8080/menu/1 \
   -H "Content-Type: application/json" \
-  -d '{"name":"লেবু চা","price":25}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name_bn":"লেবু চা","name_en":"Lemon Tea","price":25}'
 
 # Image upload
-curl -X POST localhost:8080/menu/1/image -F "image=@./chai.jpg"
+curl -X POST localhost:8080/menu/1/image -H "Authorization: Bearer $TOKEN" -F "image=@./chai.jpg"
 
 # Delete
-curl -X DELETE localhost:8080/menu/1
+curl -X DELETE localhost:8080/menu/1 -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Response format
@@ -205,10 +211,10 @@ Default: `10000` VU, `10s`, `GET /menu`. `load_test.js`-e `vus` / `duration` bod
 
 ## 🗃️ Purano database ache?
 
-`init.sql` shudhu notun DB-te cholbe. Age theke table thakle:
+`make migrate-up` chalao. Khub purano table-e `image_url` na thakle:
 
 ```sql
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT;
 ```
 
 ---
@@ -225,9 +231,12 @@ ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT 
 ---
 
 ## 🛠️ Migration
+
+```bash
 make migrate-up          # migration apply করো
 make migrate-down        # migration undo করো
 make migrate-create name=add_phone_to_users  # নতুন migration বানাও
+```
 
 <div align="center">
 

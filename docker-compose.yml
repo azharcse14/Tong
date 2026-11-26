@@ -21,7 +21,9 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      # নতুন DB তে নাম অনুযায়ী ক্রমে চলে; নতুন migration যোগ করলে এখানেও যোগ করো
+      - ./migrations/000001_initial_schema.up.sql:/docker-entrypoint-initdb.d/000001.sql
+      - ./migrations/000002_add_translations.up.sql:/docker-entrypoint-initdb.d/000002.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
